@@ -21,13 +21,13 @@ import (
 // information returned in IBM OIDC id_token payloads.
 type IBMClaimSet struct {
 	jws.ClaimSet
-	LastName     string   `json:"lastName"`
-	FirstName    string   `json:"firstName"`
-	CN           string   `json:"cn"`
-	DN           string   `json:"dn"`
-	RealmName    string   `json:"realmName"`
-	EmailAddress []string `json:"emailAddress"`
-	ClientIP     string   `json:"clientIP"`
+	LastName     string `json:"lastName"`
+	FirstName    string `json:"firstName"`
+	CN           string `json:"cn"`
+	DN           string `json:"dn"`
+	RealmName    string `json:"realmName"`
+	EmailAddress string `json:"emailAddress"`
+	ClientIP     string `json:"clientIP"`
 }
 
 // IBMw3Endpoint is the Endpoint for IBM w3 ID authentication

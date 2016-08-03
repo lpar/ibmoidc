@@ -24,15 +24,12 @@ func TestDecode(t *testing.T) {
 		Iat: 1464988688,
 		Sub: "jwt@example.com",
 		PrivateClaims: map[string]interface{}{
-			"firstName": "Jason",
-			"lastName":  "Webb-Toucan",
-			"emailAddress": []string{
-				"jwt@example.com",
-				"jason@example.com",
-			},
-			"realmName": "w3id",
-			"cn":        "Jason Webb-Toucan",
-			"clientIP":  "2600:1114:a651:4900:56ee:75ff:fe4a:3f67",
+			"firstName":    "Jason",
+			"lastName":     "Webb-Toucan",
+			"emailAddress": "jwt@example.com",
+			"realmName":    "w3id",
+			"cn":           "Jason Webb-Toucan",
+			"clientIP":     "2600:1114:a651:4900:56ee:75ff:fe4a:3f67",
 		},
 	}
 
@@ -52,11 +49,8 @@ func TestDecode(t *testing.T) {
 		t.Error("Decoded id_token had wrong subject")
 	}
 	e := cs.EmailAddress
-	if len(e) != 2 {
-		t.Error("Decoded id_token email address array had wrong length")
-	}
-	if e[0] != cs.Sub {
-		t.Error("Decoded id_token email address array had wrong primary value")
+	if e != "jwt@example.com" {
+		t.Error("Decoded id_token email address was wrong")
 	}
 	if cs.FirstName != "Jason" || cs.LastName != "Webb-Toucan" || cs.CN != "Jason Webb-Toucan" {
 		t.Error("Decoded id_token had wrong name")
@@ -69,10 +63,9 @@ func TestDecode(t *testing.T) {
 		t.Error("Verified cryptographic signature on known bad id_token!")
 	}
 
-	// It should still decode, even if it has an invalid signature.
 	_, err = Decode(badtok)
-	if err != nil {
-		t.Error("Failed to decode id_token with bad cryptographic signature")
+	if err == nil {
+		t.Error("Decoded id_token with bad cryptographic signature")
 	}
 
 }
