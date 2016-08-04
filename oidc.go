@@ -19,6 +19,9 @@ import (
 
 // IBMClaimSet adds fields to jws.ClaimSet to represent the additional
 // information returned in IBM OIDC id_token payloads.
+// The Email field is always a simple string consisting of the preferred
+// email address. If you want the original value, which could be an array,
+// use the EmailAddress field.
 type IBMClaimSet struct {
 	jws.ClaimSet
 	LastName     string `json:"lastName"`
@@ -26,8 +29,9 @@ type IBMClaimSet struct {
 	CN           string `json:"cn"`
 	DN           string `json:"dn"`
 	RealmName    string `json:"realmName"`
-	EmailAddress string `json:"emailAddress"`
-	ClientIP     string `json:"clientIP"`
+	Email        string
+	EmailAddress interface{} `json:"emailAddress"`
+	ClientIP     string      `json:"clientIP"`
 }
 
 // IBMw3Endpoint is the Endpoint for IBM w3 ID authentication
@@ -95,6 +99,23 @@ func init() {
 	oauth2.RegisterBrokenAuthHeaderProvider(IBMw3idEndpoint.TokenURL)
 }
 
+func deserializeClaimset(jsondata []byte) (*IBMClaimSet, error) {
+	cset := &IBMClaimSet{}
+	err := json.NewDecoder(bytes.NewReader(jsondata)).Decode(cset)
+	if err != nil {
+		return cset, err
+	}
+	switch et := cset.EmailAddress.(type) {
+	case string:
+		cset.Email = et
+	case []interface{}:
+		cset.Email = et[0].(string)
+	default:
+		return cset, fmt.Errorf("emailAddress claim of unexpected type")
+	}
+	return cset, nil
+}
+
 // Decode unpacks an id_token payload, as returned from the token endpoint,
 // from its raw base64-encoded value.
 func Decode(payload string) (*IBMClaimSet, error) {
@@ -106,7 +127,25 @@ func Decode(payload string) (*IBMClaimSet, error) {
 	if err != nil {
 		return nil, fmt.Errorf("can't decode id_token: %s", err)
 	}
-	cset := &IBMClaimSet{}
-	err = json.NewDecoder(bytes.NewBuffer(jpld)).Decode(cset)
-	return cset, err
+	return deserializeClaimset(jpld)
+	/*
+		cset := &IBMClaimSet{}
+		err = json.NewDecoder(bytes.NewReader(jpld)).Decode(cset)
+		if err != nil {
+			return cset, err
+		}
+
+		switch et := cset.EmailAddress.(type) {
+		case string:
+			fmt.Println("email is string %s", et)
+			cset.Email = et
+		case []string:
+			fmt.Println("email is array %+v", et)
+			cset.Email = et[0]
+		default:
+			fmt.Println("email is wtf %T", et)
+			return cset, fmt.Errorf("emailAddress claim of unexpected type")
+		}
+		return cset, nil
+	*/
 }

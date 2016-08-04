@@ -63,9 +63,59 @@ func TestDecode(t *testing.T) {
 		t.Error("Verified cryptographic signature on known bad id_token!")
 	}
 
+	// Should still decode even if signature is bad
 	_, err = Decode(badtok)
-	if err == nil {
-		t.Error("Decoded id_token with bad cryptographic signature")
+	if err != nil {
+		t.Error("Failed to decode id_token with bad cryptographic signature")
+	}
+
+}
+
+// Make sure we can handle emailAddress being an array or a string
+func TestEmailFlexibility(t *testing.T) {
+
+	json1 := []byte(`{"iss": "https://w3id.tap.ibm.com/isam",
+  "aud": "ODJmNsyoyodynelwZi00",
+  "exp": 1469566949,
+  "iat": 1469559749,
+  "sub": "parrot@example.com",
+  "lastName": "Parrot",
+  "firstName": "John",
+  "cn": "John Parrot",
+  "dn": "parrot@example.com",
+  "realmName": "W3IDRealm",
+  "emailAddress": ["john@example.com", "parrot@example.com"],
+  "clientIP": "10.0.0.2"}`)
+
+	json2 := []byte(`{"iss": "https://w3id.tap.ibm.com/isam",
+  "aud": "ODJmNsyoyodynelwZi00",
+  "exp": 1469566949,
+  "iat": 1469559749,
+  "sub": "parrot@example.com",
+  "lastName": "Parrot",
+  "firstName": "John",
+  "cn": "John Parrot",
+  "dn": "parrot@example.com",
+  "realmName": "W3IDRealm",
+  "emailAddress": "john@example.com",
+  "clientIP": "10.0.0.2"}`)
+
+	cs1, err1 := deserializeClaimset(json1)
+	cs2, err2 := deserializeClaimset(json2)
+
+	if err1 != nil {
+		t.Errorf("array emailAddress deserialize failed with error %s", err1)
+	}
+	if err2 != nil {
+		t.Errorf("string emailAddress deserialize failed with error %s", err2)
+	}
+
+	if cs1.Email != "john@example.com" {
+		t.Errorf("array emailAddress deserialize gave wrong value, expected john@example.com got %s", cs1.Email)
+	}
+
+	if cs2.Email != "john@example.com" {
+		t.Errorf("string emailAddress deserialize gave wrong value, expected john@example.com got %s", cs2.Email)
 	}
 
 }
