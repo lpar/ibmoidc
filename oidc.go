@@ -128,24 +128,4 @@ func Decode(payload string) (*IBMClaimSet, error) {
 		return nil, fmt.Errorf("can't decode id_token: %s", err)
 	}
 	return deserializeClaimset(jpld)
-	/*
-		cset := &IBMClaimSet{}
-		err = json.NewDecoder(bytes.NewReader(jpld)).Decode(cset)
-		if err != nil {
-			return cset, err
-		}
-
-		switch et := cset.EmailAddress.(type) {
-		case string:
-			fmt.Println("email is string %s", et)
-			cset.Email = et
-		case []string:
-			fmt.Println("email is array %+v", et)
-			cset.Email = et[0]
-		default:
-			fmt.Println("email is wtf %T", et)
-			return cset, fmt.Errorf("emailAddress claim of unexpected type")
-		}
-		return cset, nil
-	*/
 }
