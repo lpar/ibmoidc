@@ -3,36 +3,28 @@
 package ibmoidc
 
 import (
-	"bytes"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
-	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
 	"strings"
 
+	"github.com/lestrrat/go-jwx/jwt"
 	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/jws"
 )
 
-// IBMClaimSet adds fields to jws.ClaimSet to represent the additional
-// information returned in IBM OIDC id_token payloads.
-// The Email field is always a simple string consisting of the preferred
-// email address. If you want the original value, which could be an array,
-// use the EmailAddress field.
-type IBMClaimSet struct {
-	jws.ClaimSet
-	LastName     string `json:"lastName"`
-	FirstName    string `json:"firstName"`
-	CN           string `json:"cn"`
-	DN           string `json:"dn"`
-	RealmName    string `json:"realmName"`
-	Email        string
-	EmailAddress interface{} `json:"emailAddress"`
-	ClientIP     string      `json:"clientIP"`
-}
+// List of IBM private claims with corresponding standard claims
+// from RFC 7519 / <http://www.iana.org/assignments/jwt/jwt.xhtml>:
+//
+// lastName      family_name
+// firstName     given_name
+// cn            name
+// dn            sub
+// realmName
+// emailAddress  email
+// clientIP
 
 // IBMw3Endpoint is the Endpoint for IBM w3 ID authentication
 var IBMw3idEndpoint = oauth2.Endpoint{
@@ -99,27 +91,52 @@ func init() {
 	oauth2.RegisterBrokenAuthHeaderProvider(IBMw3idEndpoint.TokenURL)
 }
 
-func deserializeClaimset(jsondata []byte) (*IBMClaimSet, error) {
-	cset := &IBMClaimSet{}
-	err := json.NewDecoder(bytes.NewReader(jsondata)).Decode(cset)
+// UnmarshalJSON turns a JSON payload from a JWS token into a set of claims,
+// and handles remapping IBM-specific private claims to standard ones:
+//
+// lastName     → family_name
+// firstName    → given_name
+// cn           → name
+// dn           → sub
+// emailAddress → email
+//
+// The original emailAddress claim is left intact, as are the dn and realmName
+// claims. The others are removed after remapping.
+//
+func UnmarshalJSON(jsondata []byte) (*jwt.ClaimSet, error) {
+	cset := jwt.NewClaimSet()
+	err := cset.UnmarshalJSON(jsondata)
 	if err != nil {
 		return cset, err
 	}
-	switch et := cset.EmailAddress.(type) {
+	// IBM returns either an array or a string as e-mail address
+	email := cset.Get("emailAddress")
+	switch et := email.(type) {
 	case string:
-		cset.Email = et
+		cset.Set("email", et)
 	case []interface{}:
-		cset.Email = et[0].(string)
+		cset.Set("email", et[0].(string))
 	default:
 		return cset, fmt.Errorf("emailAddress claim of unexpected type")
+	}
+	// Remap some other fields
+	remap := map[string]string{
+		"lastName":  "family_name",
+		"firstName": "given_name",
+		"cn":        "name",
+	}
+	for kf, kt := range remap {
+		v := cset.Get(kf)
+		cset.Set(kt, v)
+		delete(cset.PrivateClaims, kf)
 	}
 	return cset, nil
 }
 
 // Decode unpacks an id_token payload, as returned from the token endpoint,
 // from its raw base64-encoded value.
-func Decode(payload string) (*IBMClaimSet, error) {
-	s := strings.Split(payload, ".")
+func Decode(payload []byte) (*jwt.ClaimSet, error) {
+	s := strings.Split(string(payload), ".")
 	if len(s) < 2 {
 		return nil, errors.New("invalid id_token payload: not a triple")
 	}
@@ -127,5 +144,5 @@ func Decode(payload string) (*IBMClaimSet, error) {
 	if err != nil {
 		return nil, fmt.Errorf("can't decode id_token: %s", err)
 	}
-	return deserializeClaimset(jpld)
+	return UnmarshalJSON(jpld)
 }
