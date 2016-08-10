@@ -15,17 +15,6 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// List of IBM private claims with corresponding standard claims
-// from RFC 7519 / <http://www.iana.org/assignments/jwt/jwt.xhtml>:
-//
-// lastName      family_name
-// firstName     given_name
-// cn            name
-// dn            sub
-// realmName
-// emailAddress  email
-// clientIP
-
 // IBMw3Endpoint is the Endpoint for IBM w3 ID authentication
 var IBMw3idEndpoint = oauth2.Endpoint{
 	AuthURL:  "https://w3id.tap.ibm.com/isam/oidc/endpoint/amapp-runtime-oidcidp/authorize",
