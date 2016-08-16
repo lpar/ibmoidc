@@ -3,6 +3,8 @@ package ibmoidc
 import (
 	"crypto/rand"
 	"crypto/rsa"
+	"net/http"
+	"strconv"
 	"testing"
 
 	"github.com/lestrrat/go-jwx/jwa"
@@ -10,21 +12,19 @@ import (
 	"github.com/lestrrat/go-jwx/jwt"
 )
 
-func TestDecode(t *testing.T) {
+func makeTestClaimSet() *jwt.ClaimSet {
+	cs := jwt.NewClaimSet()
 
-	prikey, err := rsa.GenerateKey(rand.Reader, 1024)
-
-	payload := jwt.NewClaimSet()
-
-	payload.Construct(map[string]interface{}{
+	cs.Construct(map[string]interface{}{
 		"iss": "http://example.com/",
-		"aud": "www.example.com",
 		"exp": 1496524688,
 		"iat": 1464988688,
 		"sub": "jwt@example.com",
 	})
 
-	payload.PrivateClaims = map[string]interface{}{
+	cs.Set("aud", []string{"www.example.com"})
+
+	cs.PrivateClaims = map[string]interface{}{
 		"firstName":    "Jason",
 		"lastName":     "Webb-Toucan",
 		"emailAddress": "jwt@example.com",
@@ -33,6 +33,14 @@ func TestDecode(t *testing.T) {
 		"dn":           "jwt@example.com",
 		"clientIP":     "2600:1114:a651:4900:56ee:75ff:fe4a:3f67",
 	}
+	return cs
+}
+
+func TestDecode(t *testing.T) {
+
+	prikey, err := rsa.GenerateKey(rand.Reader, 1024)
+
+	payload := makeTestClaimSet()
 
 	jpay, err := payload.MarshalJSON()
 	if err != nil {
@@ -134,4 +142,48 @@ func TestEmailFlexibility(t *testing.T) {
 		t.Errorf("string emailAddress deserialize gave wrong value, expected john@example.com got %s", cs2.Get("email"))
 	}
 
+}
+
+func getString(t *testing.T, cs *jwt.ClaimSet, key string) string {
+	x := cs.Get(key)
+	switch v := x.(type) {
+	case string:
+		return v
+	case int64:
+		return strconv.Itoa(int(v))
+	case []string:
+		if len(v) > 0 {
+			return v[0]
+		}
+		t.Errorf("empty slice in claim %s: %+v", key, x)
+	default:
+		t.Errorf("unexpected claim data type %+v", x)
+	}
+	return ""
+}
+
+func TestContextHandling(t *testing.T) {
+	cs := makeTestClaimSet()
+	req, err := http.NewRequest("GET", "http://www.example.com", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nreq := RequestWithClaimSet(req, cs)
+	ncs, ok := ClaimSetFromRequest(nreq)
+	if !ok {
+		t.Error("Didn't find claimset in request")
+	}
+
+	claims := []string{"iss", "aud", "exp", "iat", "sub", "firstName", "lastName", "emailAddress", "realmName", "cn", "dn", "clientIP"}
+
+	for _, cname := range claims {
+		before := getString(t, cs, cname)
+		if before == "" {
+			t.Errorf("claim %s empty in test value", cname)
+		}
+		after := getString(t, ncs, cname)
+		if before != after {
+			t.Errorf("claim %s mangled, expected %s got %s", cname, before, after)
+		}
+	}
 }

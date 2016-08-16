@@ -1,6 +1,7 @@
 package ibmoidc
 
 import (
+	"context"
 	"crypto/rsa"
 	"log"
 	"net/http"
@@ -9,9 +10,7 @@ import (
 	"github.com/lestrrat/go-jwx/jwa"
 	"github.com/lestrrat/go-jwx/jws"
 	"github.com/lestrrat/go-jwx/jwt"
-	"github.com/rs/xhandler"
 
-	"golang.org/x/net/context"
 	"golang.org/x/oauth2"
 )
 
@@ -39,8 +38,8 @@ func NewIntranetAuthenticator() *Authenticator {
 	return auth
 }
 
-func (auth *Authenticator) BeginLogin() xhandler.HandlerC {
-	return xhandler.HandlerFuncC(func(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+func (auth *Authenticator) BeginLogin() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		csrftok, err := MakeCSRFtoken()
 		if err != nil {
 			log.Printf("[ERROR] Unable to make CSRF token: %s", err)
@@ -56,8 +55,8 @@ func (auth *Authenticator) BeginLogin() xhandler.HandlerC {
 	})
 }
 
-func (auth *Authenticator) CompleteLogin(next xhandler.HandlerC) xhandler.HandlerC {
-	return xhandler.HandlerFuncC(func(ctx context.Context, w http.ResponseWriter, r *http.Request) {
+func (auth *Authenticator) CompleteLogin(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[DEBUG] loginCallback started")
 
 		// First verify the state value to protect against CSRF attack
@@ -118,16 +117,26 @@ func (auth *Authenticator) CompleteLogin(next xhandler.HandlerC) xhandler.Handle
 
 		// Success, so put the claimset in the Context and call the next
 		// function
-		ctx = ContextWithClaims(ctx, claimset)
-		next.ServeHTTPC(ctx, w, r)
+		nr := RequestWithClaimSet(r, claimset)
+		next.ServeHTTP(w, nr)
 	})
 }
 
-func ContextWithClaims(ctx context.Context, cs *jwt.ClaimSet) context.Context {
-	return context.WithValue(ctx, userIdentity, cs)
+// RequestWithClaims adds a claimset to the http request, using a private
+// context key.
+func RequestWithClaimSet(r *http.Request, cs *jwt.ClaimSet) *http.Request {
+	ctx := r.Context()
+	nctx := context.WithValue(ctx, userIdentity, cs)
+	nr := r.WithContext(nctx)
+	return nr
 }
 
-func ClaimsFromContext(ctx context.Context) (*jwt.ClaimSet, bool) {
+// ClaimsFromRequest obtains the authenticated claimset from the request's
+// context, where it was presumably stored earlier by RequestWithClaims.
+// The boolean indicates whether an authenticated claimset was actually found
+// in the request.
+func ClaimSetFromRequest(r *http.Request) (*jwt.ClaimSet, bool) {
+	ctx := r.Context()
 	cs, ok := ctx.Value(userIdentity).(*jwt.ClaimSet)
 	return cs, ok
 }
