@@ -15,7 +15,7 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// IBMw3Endpoint is the Endpoint for IBM w3 ID authentication
+// IBMw3idEndpoint is the Endpoint for IBM w3ID authentication.
 var IBMw3idEndpoint = oauth2.Endpoint{
 	AuthURL:  "https://w3id.tap.ibm.com/isam/oidc/endpoint/amapp-runtime-oidcidp/authorize",
 	TokenURL: "https://w3id.tap.ibm.com/isam/oidc/endpoint/amapp-runtime-oidcidp/token",
@@ -102,9 +102,15 @@ func UnmarshalJSON(jsondata []byte) (*jwt.ClaimSet, error) {
 	email := cset.Get("emailAddress")
 	switch et := email.(type) {
 	case string:
-		cset.Set("email", et)
+		err := cset.Set("email", et)
+		if err != nil {
+			return cset, fmt.Errorf("error adding email to claimset: %s", err)
+		}
 	case []interface{}:
-		cset.Set("email", et[0].(string))
+		err := cset.Set("email", et[0].(string))
+		if err != nil {
+			return cset, fmt.Errorf("error adding email to claimset: %s", err)
+		}
 	default:
 		return cset, fmt.Errorf("emailAddress claim of unexpected type")
 	}
@@ -116,7 +122,10 @@ func UnmarshalJSON(jsondata []byte) (*jwt.ClaimSet, error) {
 	}
 	for kf, kt := range remap {
 		v := cset.Get(kf)
-		cset.Set(kt, v)
+		err := cset.Set(kt, v)
+		if err != nil {
+			return cset, fmt.Errorf("error adding %s to claimset: %s", kt, err)
+		}
 		delete(cset.PrivateClaims, kf)
 	}
 	return cset, nil

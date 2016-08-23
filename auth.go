@@ -18,11 +18,14 @@ type key int
 
 const userIdentity key = 0
 
+// Authenticator is an object for processing IBM authentication responses.
 type Authenticator struct {
 	OAuth2 *oauth2.Config
 	PubKey *rsa.PublicKey
 }
 
+// NewIntranetAuthenticator creates an Authenticator object for processing
+// intranet w3ID authentication server responses.
 func NewIntranetAuthenticator() *Authenticator {
 	oauth2 := &oauth2.Config{
 		ClientID:     os.Getenv("W3ID_CLIENTID"),
@@ -38,6 +41,8 @@ func NewIntranetAuthenticator() *Authenticator {
 	return auth
 }
 
+// BeginLogin redirects the browser to the federated authentication provider
+// in order to being the login process.
 func (auth *Authenticator) BeginLogin() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		csrftok, err := MakeCSRFtoken()
@@ -55,6 +60,11 @@ func (auth *Authenticator) BeginLogin() http.Handler {
 	})
 }
 
+// CompleteLogin accepts the HTTP GET response from the federated
+// authentication provider and completes the login process by fetching
+// identity information from the provider. The verified identity is then
+// added to the request context, so that it can be accessed by the next
+// handler in the chain using ClaimSetFromRequest.
 func (auth *Authenticator) CompleteLogin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[DEBUG] loginCallback started")
@@ -122,7 +132,7 @@ func (auth *Authenticator) CompleteLogin(next http.Handler) http.Handler {
 	})
 }
 
-// RequestWithClaims adds a claimset to the http request, using a private
+// RequestWithClaimSet adds a claimset to the http request, using a private
 // context key.
 func RequestWithClaimSet(r *http.Request, cs *jwt.ClaimSet) *http.Request {
 	ctx := r.Context()
@@ -131,8 +141,8 @@ func RequestWithClaimSet(r *http.Request, cs *jwt.ClaimSet) *http.Request {
 	return nr
 }
 
-// ClaimsFromRequest obtains the authenticated claimset from the request's
-// context, where it was presumably stored earlier by RequestWithClaims.
+// ClaimSetFromRequest obtains the authenticated claimset from the request's
+// context, where it was stored earlier by RequestWithClaimSet.
 // The boolean indicates whether an authenticated claimset was actually found
 // in the request.
 func ClaimSetFromRequest(r *http.Request) (*jwt.ClaimSet, bool) {
