@@ -17,13 +17,56 @@ import (
 
 // IBMw3idEndpoint is the Endpoint for IBM w3ID authentication.
 var IBMw3idEndpoint = oauth2.Endpoint{
-	AuthURL:  "https://w3id.tap.ibm.com/isam/oidc/endpoint/amapp-runtime-oidcidp/authorize",
-	TokenURL: "https://w3id.tap.ibm.com/isam/oidc/endpoint/amapp-runtime-oidcidp/token",
+	AuthURL:  "https://w3id.sso.ibm.com/isam/oidc/endpoint/amapp-runtime-oidcidp/authorize",
+	TokenURL: "https://w3id.sso.ibm.com/isam/oidc/endpoint/amapp-runtime-oidcidp/token",
 }
 
 // IBMw3idPublicKey is the rsa.PublicKey to use to verify the signature on
 // an id_token value returned from IBMw3idEndpoint.TokenURL.
 var IBMw3idPublicKey = pemToRSA(`
+-----BEGIN CERTIFICATE-----
+MIIFijCCA3KgAwIBAgIIW9rTyXsPjfswDQYJKoZIhvcNAQEFBQAwYzELMAkGA1UE
+BhMCdXMxCzAJBgNVBAgTAnR4MRIwEAYDVQQHEwlzb2Z0bGF5ZXIxDDAKBgNVBAoT
+A2libTENMAsGA1UECxMEaXNhbTEWMBQGA1UEAwwNKi5zc28uaWJtLmNvbTAeFw0x
+NjA3MjYxODE3MjJaFw0yMTA3MjYxODE3MjJaMGMxCzAJBgNVBAYTAnVzMQswCQYD
+VQQIEwJ0eDESMBAGA1UEBxMJc29mdGxheWVyMQwwCgYDVQQKEwNpYm0xDTALBgNV
+BAsTBGlzYW0xFjAUBgNVBAMMDSouc3NvLmlibS5jb20wggIiMA0GCSqGSIb3DQEB
+AQUAA4ICDwAwggIKAoICAQCzmGqNMH0mxwGfv1P/LlPeqseniWPC1j9Csy37nZnG
+snUKoDT7nWUFhxgNDHWDODlsgE2hswSEfgqdYZyno5mQMGK7+jP3dnG0u+mpcQ8s
+xQmpOOOzKmicWz1V5v8dCysVoBrVjV0DJnY/kdxcf4DJW5b5Jo/tdc0ILcJwechO
+icOhndbkUdH6lQDVkmOcUY6fCDviZjUOjL33VfMvEZdhhEDhpjuANhcoq2vGUeg3
+8ZuY8bK1MOmAcNcUNguWhi9NVjKEbfv/p8a0uet2bnfmkNkeqNtstRBa1XEAZLpO
+LGxPqNL2v3SIRDNMavXKuecEYXMFFokga3IhmQzTRo9uktJbCl8B7THBvs+Ksm6S
+hAlcgs0n7mhOiEMmcGMknl2Sc1VpRzb8gNMqq/C3YH8XC9xc0LyRXISN0ug6tQcs
+YRoLUaN22vJU6Qu8kyADj1nVTNk1gq49l5mGGffhEbrghULIQLb0zLiapgX3Ma2a
+4uhOmmKfH8HglOOfQemekuerXRNqZF0hMgyPagCga8w2LLiiMFUWQmS+qs7w55Cx
+X+AIWjAOy6uddvgTF4JHdaPYFxP5/wynLC9OlP7+ijCJmW1enOVTdrn0nMdhE8sD
+vjJCSWM03VQpxLQuXGoUQs3y+p9/22ft6VfYUOD8IXKPH+u6S0ZtaqqBdMXGHbKC
+CwIDAQABo0IwQDAdBgNVHQ4EFgQU4dUZV6haEYrgZg0bKOaD2Hrgw7cwHwYDVR0j
+BBgwFoAU4dUZV6haEYrgZg0bKOaD2Hrgw7cwDQYJKoZIhvcNAQEFBQADggIBAK9N
+L+FdiQtsJKXjjRl7KiosJ+ez5fFqClzS23dSwXXWiXORTsIlnKfm5xetTPwnebRt
+XbyfpdgeQ7x3mjhkfodtyj+of0OCskHLWCXzf3q/8XeGG6aOciQwrFL4KZEpBiQb
+p3cMy0LmS+JOgchS37Y5WkXCwFGrHEIbb5X7qaOOmaMsQKoeztv+xPUVxfTb6n+i
+2LGAXle6QXbmjhqE67EH2dLlAMVxFGDQIvXkz+mVQu78V10IPL2PTxx4y2ypXo/A
+bIAlzhZmpUYvB/Qqs5nj8Hoxtspc9kluYfaSP2/o5QLyhFfxl3hfXyhxW8ngzkhQ
+nXjDTqnXzes/ffcNw641gk8Nsb2l4KWicSVxPYcoaXDwn+L63cwCovn7pKiueoSK
+gLldhFp/rjSqpYK8tZSGToeEgA1cl2Ia26phVKa5RnB27U0l4LLIZmzDoH9LOEyz
+/VQAB3QQYQ7K3obcXraqcLeogf8vGYWChIqLL4nlqmeRrB0lDu/DZ7v5dgKrFws8
+EYAmt7loO42lXpdqK6KwyRazDEQY2mCCEQiwGl3o7jri2zT6el6b1aO3gQEvGgf6
+DDL5ZheWFybSPMYDdlqTMlrdq7PxhySnoqn0JjKWqJkN+1F0Kms/k6ZM8pqZX3Zm
+1M/QwlvmNhXX3X0zORRmgusiV8MPDbiwkp82m335
+-----END CERTIFICATE-----
+`)
+
+// IBMw3idEndpoint is the TAP pilot endpoint for IBM w3ID authentication.
+var IBMw3idTapEndpoint = oauth2.Endpoint{
+	AuthURL:  "https://w3id.tap.ibm.com/isam/oidc/endpoint/amapp-runtime-oidcidp/authorize",
+	TokenURL: "https://w3id.tap.ibm.com/isam/oidc/endpoint/amapp-runtime-oidcidp/token",
+}
+
+// IBMw3idPublicKey is the rsa.PublicKey to use to verify the signature on
+// an id_token value returned from IBMw3idTapEndpoint.TokenURL.
+var IBMw3idTapPublicKey = pemToRSA(`
 -----BEGIN CERTIFICATE-----
 MIIE9TCCA92gAwIBAgIQWOR/OBcrWWF01H2dMB/axDANBgkqhkiG9w0BAQsFADBE
 MQswCQYDVQQGEwJVUzEWMBQGA1UEChMNR2VvVHJ1c3QgSW5jLjEdMBsGA1UEAxMU
