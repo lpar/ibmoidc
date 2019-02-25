@@ -1,14 +1,13 @@
 package ibmoidc
 
 import (
+	"bytes"
 	"context"
 	"crypto/rsa"
 	"errors"
 	"fmt"
-	"github.com/lestrrat/go-jwx/jwa"
-	"github.com/lestrrat/go-jwx/jws"
-	"github.com/lestrrat/go-jwx/jwt"
-	"io/ioutil"
+	"github.com/lestrrat-go/jwx/jwa"
+	"github.com/lestrrat-go/jwx/jwt"
 	"net/http"
 
 	"github.com/lpar/blammo/log"
@@ -96,40 +95,29 @@ func (auth *Authenticator) BeginLogin() http.Handler {
 	})
 }
 
-func (auth *Authenticator) FetchToken(code string) (*jwt.ClaimSet, error) {
-	claimset := &jwt.ClaimSet{}
+func (auth *Authenticator) FetchToken(code string) (*jwt.Token, error) {
+	var jsonwt *jwt.Token
 	token, err := auth.OAuth2.Exchange(context.Background(), code)
 	if err != nil {
-		return claimset, err
+		return jsonwt, err
 	}
 	if !token.Valid() {
-		return claimset, errors.New("endpoint oauth2.Exchange returned invalid token")
+		return jsonwt, errors.New("endpoint oauth2.Exchange returned invalid token")
 	}
 	log.Debug().Msg("exchanged code for token")
 
 	// Next, extract the encoded id_token from the access token response
 	encidtoken := token.Extra("id_token").(string)
 	if len(encidtoken) == 0 {
-		return claimset, errors.New("endpoint oauth2.Exchange() response missing id_token")
+		return jsonwt, errors.New("endpoint oauth2.Exchange() response missing id_token")
 	}
 	log.Debug().Msg("got id_token from token")
-
-	_ = ioutil.WriteFile("/tmp/rawidtoken.json", []byte(encidtoken), 0644)
-
-	// Verify the cryptographic signature on the id_token before using
-	// any information in it
-	jsonwt, err := jws.Verify([]byte(encidtoken), jwa.RS256, auth.PubKey)
+	jsonwt, err = jwt.ParseVerify(bytes.NewReader([]byte(encidtoken)), jwa.RS256, auth.PubKey)
 	if err != nil {
-		return claimset, fmt.Errorf("endpoint oauth2.Exchange() id_token signature invalid: %v", err)
+		return jsonwt, fmt.Errorf("endpoint oauth2.Exchange() id_token invalid: %v", err)
 	}
 	log.Debug().Msg("verified signature on id_token")
-
-	log.Debug().Str("id_token", string(jsonwt)).Msg("unmarshaling raw token")
-	claimset, err = UnmarshalJSON(jsonwt)
-	if err != nil {
-		return claimset, fmt.Errorf("w3id.Exchange() id_token JSON unmarshal failed: %v", err)
-	}
-	return claimset, nil
+	return jsonwt, nil
 }
 
 // CompleteLoginFunc is the http.HandlerFunc version of CompleteLogin.
@@ -137,7 +125,7 @@ func (auth *Authenticator) FetchToken(code string) (*jwt.ClaimSet, error) {
 // authentication provider and completes the login process by fetching
 // identity information from the provider. The verified identity is then
 // added to the request context, so that it can be accessed by the next
-// handler in the chain using ClaimSetFromRequest.
+// handler in the chain using TokenFromRequest.
 func (auth *Authenticator) CompleteLoginFunc(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		nr := auth.decodeClaimsetToRequest(w, r)
@@ -170,7 +158,7 @@ func (auth *Authenticator) decodeClaimsetToRequest(w http.ResponseWriter, r *htt
 		http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
 		return r
 	}
-  nr := RequestWithClaimSet(r, claimset)
+  nr := RequestWithToken(r, claimset)
 	return nr
 }
 
@@ -178,7 +166,7 @@ func (auth *Authenticator) decodeClaimsetToRequest(w http.ResponseWriter, r *htt
 // authentication provider and completes the login process by fetching
 // identity information from the provider. The verified identity is then
 // added to the request context, so that it can be accessed by the next
-// handler in the chain using ClaimSetFromRequest.
+// handler in the chain using TokenFromRequest.
 func (auth *Authenticator) CompleteLogin(next http.Handler) http.Handler {
 	return http.HandlerFunc( func(w http.ResponseWriter, r *http.Request) {
 		nr := auth.decodeClaimsetToRequest(w, r)
@@ -186,21 +174,21 @@ func (auth *Authenticator) CompleteLogin(next http.Handler) http.Handler {
 	})
 }
 
-// RequestWithClaimSet adds a claimset to the http request, using a private
+// RequestWithToken adds a claimset to the http request, using a private
 // context key.
-func RequestWithClaimSet(r *http.Request, cs *jwt.ClaimSet) *http.Request {
+func RequestWithToken(r *http.Request, cs *jwt.Token) *http.Request {
 	ctx := r.Context()
 	nctx := context.WithValue(ctx, userIdentity, cs)
 	nr := r.WithContext(nctx)
 	return nr
 }
 
-// ClaimSetFromRequest obtains the authenticated claimset from the request's
-// context, where it was stored earlier by RequestWithClaimSet.
+// TokenFromRequest obtains the authenticated claimset from the request's
+// context, where it was stored earlier by RequestWithToken.
 // The boolean indicates whether an authenticated claimset was actually found
 // in the request.
-func ClaimSetFromRequest(r *http.Request) (*jwt.ClaimSet, bool) {
+func TokenFromRequest(r *http.Request) (*jwt.Token, bool) {
 	ctx := r.Context()
-	cs, ok := ctx.Value(userIdentity).(*jwt.ClaimSet)
+	cs, ok := ctx.Value(userIdentity).(*jwt.Token)
 	return cs, ok
 }

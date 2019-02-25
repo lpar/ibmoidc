@@ -5,13 +5,8 @@ package ibmoidc
 import (
 	"crypto/rsa"
 	"crypto/x509"
-	"encoding/base64"
 	"encoding/pem"
-	"errors"
-	"fmt"
-	"strings"
 
-	"github.com/lestrrat/go-jwx/jwt"
 	"golang.org/x/oauth2"
 )
 
@@ -197,6 +192,7 @@ func init() {
 	oauth2.RegisterBrokenAuthHeaderProvider(IBMw3idStagingEndpoint.TokenURL)
 }
 
+/*
 // UnmarshalJSON turns a JSON payload from a JWS token into a set of claims,
 // and handles remapping IBM-specific private claims to standard ones:
 //
@@ -217,6 +213,7 @@ func UnmarshalJSON(jsondata []byte) (*jwt.ClaimSet, error) {
 	}
 	// IBM returns either an array or a string as e-mail address
 	email := cset.Get("emailAddress")
+	if email != nil {
 	switch et := email.(type) {
 	case string:
 		err := cset.Set("email", et)
@@ -230,6 +227,7 @@ func UnmarshalJSON(jsondata []byte) (*jwt.ClaimSet, error) {
 		}
 	default:
 		return cset, fmt.Errorf("emailAddress claim of unexpected type")
+	}
 	}
 	// Remap some other fields
 	remap := map[string]string{
@@ -261,3 +259,4 @@ func Decode(payload []byte) (*jwt.ClaimSet, error) {
 	}
 	return UnmarshalJSON(jpld)
 }
+*/
