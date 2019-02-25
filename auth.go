@@ -129,38 +129,56 @@ func (auth *Authenticator) FetchToken(code string) (*jwt.ClaimSet, error) {
 	return claimset, nil
 }
 
+// CompleteLoginFunc is the http.HandlerFunc version of CompleteLogin.
+// It accepts the HTTP GET response from the federated
+// authentication provider and completes the login process by fetching
+// identity information from the provider. The verified identity is then
+// added to the request context, so that it can be accessed by the next
+// handler in the chain using ClaimSetFromRequest.
+func (auth *Authenticator) CompleteLoginFunc(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		nr := auth.decodeClaimsetToRequest(w, r)
+		next(w, nr)
+	}
+}
+
+// decodeClaimsetToRequest checks the CSRF cookie and fetches the claimset using the token in the response.
+// If everything worked, it adds the claimset to the request and returns the new request.
+// If not, it returns the same request it was passed.
+func (auth *Authenticator) decodeClaimsetToRequest(w http.ResponseWriter, r *http.Request) *http.Request {
+	log.Debug().Msg("loginCallback started")
+
+	// First verify the state value to protect against CSRF attack
+	cstate := ReadCSRFcookie(r)
+	state := r.FormValue("state")
+	if state != cstate {
+		log.Debug().Str("expected", cstate).Str("got", state).Msg("invalid CSRF state")
+		http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+		return r
+	}
+
+	log.Debug().Msg("passed CSRF check")
+
+	// Then use the code we were given to fetch an access token via TLS
+	code := r.FormValue("code")
+	claimset, err := auth.FetchToken(code)
+	if err != nil {
+		log.Error().Err(err).Msg("login failed")
+		http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+		return r
+	}
+  nr := RequestWithClaimSet(r, claimset)
+	return nr
+}
+
 // CompleteLogin accepts the HTTP GET response from the federated
 // authentication provider and completes the login process by fetching
 // identity information from the provider. The verified identity is then
 // added to the request context, so that it can be accessed by the next
 // handler in the chain using ClaimSetFromRequest.
 func (auth *Authenticator) CompleteLogin(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Debug().Msg("loginCallback started")
-
-		// First verify the state value to protect against CSRF attack
-		cstate := ReadCSRFcookie(r)
-		state := r.FormValue("state")
-		if state != cstate {
-			log.Debug().Str("expected", cstate).Str("got", state).Msg("invalid CSRF state")
-			http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
-			return
-		}
-
-		log.Debug().Msg("passed CSRF check")
-
-		// Then use the code we were given to fetch an access token via TLS
-		code := r.FormValue("code")
-		claimset, err := auth.FetchToken(code)
-		if err != nil {
-			log.Error().Err(err).Msg("login failed")
-			http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
-			return
-		}
-
-		// Success, so put the claimset in the Context and call the next
-		// function
-		nr := RequestWithClaimSet(r, claimset)
+	return http.HandlerFunc( func(w http.ResponseWriter, r *http.Request) {
+		nr := auth.decodeClaimsetToRequest(w, r)
 		next.ServeHTTP(w, nr)
 	})
 }
