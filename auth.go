@@ -8,6 +8,7 @@ import (
 	"github.com/lestrrat/go-jwx/jwa"
 	"github.com/lestrrat/go-jwx/jws"
 	"github.com/lestrrat/go-jwx/jwt"
+	"io/ioutil"
 	"net/http"
 
 	"github.com/lpar/blammo/log"
@@ -97,27 +98,29 @@ func (auth *Authenticator) BeginLogin() http.Handler {
 
 func (auth *Authenticator) FetchToken(code string) (*jwt.ClaimSet, error) {
 	claimset := &jwt.ClaimSet{}
-	token, err := auth.OAuth2.Exchange(oauth2.NoContext, code)
+	token, err := auth.OAuth2.Exchange(context.Background(), code)
 	if err != nil {
 		return claimset, err
 	}
 	if !token.Valid() {
-		return claimset, errors.New("w3id.Exchange returned invalid token")
+		return claimset, errors.New("endpoint oauth2.Exchange returned invalid token")
 	}
 	log.Debug().Msg("exchanged code for token")
 
 	// Next, extract the encoded id_token from the access token response
 	encidtoken := token.Extra("id_token").(string)
 	if len(encidtoken) == 0 {
-		return claimset, errors.New("w3id.Exchange() response missing id_token")
+		return claimset, errors.New("endpoint oauth2.Exchange() response missing id_token")
 	}
 	log.Debug().Msg("got id_token from token")
+
+	_ = ioutil.WriteFile("/tmp/rawidtoken.json", []byte(encidtoken), 0644)
 
 	// Verify the cryptographic signature on the id_token before using
 	// any information in it
 	jsonwt, err := jws.Verify([]byte(encidtoken), jwa.RS256, auth.PubKey)
 	if err != nil {
-		return claimset, fmt.Errorf("w3id.Exchange() id_token signature invalid: %v", err)
+		return claimset, fmt.Errorf("endpoint oauth2.Exchange() id_token signature invalid: %v", err)
 	}
 	log.Debug().Msg("verified signature on id_token")
 
