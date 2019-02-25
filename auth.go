@@ -5,14 +5,12 @@ import (
 	"crypto/rsa"
 	"errors"
 	"fmt"
-	"net/http"
-	"os"
-
 	"github.com/lestrrat/go-jwx/jwa"
 	"github.com/lestrrat/go-jwx/jws"
 	"github.com/lestrrat/go-jwx/jwt"
+	"net/http"
 
-	"github.com/lpar/log"
+	"github.com/lpar/blammo/log"
 
 	"golang.org/x/oauth2"
 )
@@ -28,12 +26,30 @@ type Authenticator struct {
 }
 
 // NewIntranetAuthenticator creates an Authenticator object for processing
-// intranet w3ID authentication server responses.
-func NewIntranetAuthenticator() *Authenticator {
+// IBMid authentication server responses.
+func NewIBMidAuthenticator(clientid, clientsecret, redirecturl string) *Authenticator {
 	oauth2 := &oauth2.Config{
-		ClientID:     os.Getenv("W3ID_CLIENTID"),
-		ClientSecret: os.Getenv("W3ID_CLIENTSECRET"),
-		RedirectURL:  os.Getenv("W3ID_CALLBACKURL"),
+		ClientID:     clientid,
+		ClientSecret: clientsecret,
+		RedirectURL:  redirecturl,
+		Endpoint:     IBMidEndpoint,
+		Scopes:       []string{"openid"},
+	}
+	auth := &Authenticator{
+		OAuth2: oauth2,
+		PubKey: IBMidPublicKey,
+	}
+	return auth
+}
+
+
+// NewIntranetAuthenticator creates an Authenticator object for processing
+// intranet w3ID authentication server responses.
+func NewIntranetAuthenticator(clientid, clientsecret, redirecturl string) *Authenticator {
+	oauth2 := &oauth2.Config{
+		ClientID:     clientid,
+		ClientSecret: clientsecret,
+		RedirectURL:  redirecturl,
 		Endpoint:     IBMw3idEndpoint,
 		Scopes:       []string{"openid"},
 	}
@@ -46,11 +62,11 @@ func NewIntranetAuthenticator() *Authenticator {
 
 // NewIntranetStagingAuthenticator creates an Authenticator object for processing
 // intranet w3ID authentication server responses from the staging server.
-func NewIntranetStagingAuthenticator() *Authenticator {
+func NewIntranetStagingAuthenticator(clientid, clientsecret, redirecturl string) *Authenticator {
 	oauth2 := &oauth2.Config{
-		ClientID:     os.Getenv("W3ID_CLIENTID"),
-		ClientSecret: os.Getenv("W3ID_CLIENTSECRET"),
-		RedirectURL:  os.Getenv("W3ID_CALLBACKURL"),
+		ClientID:     clientid,
+		ClientSecret: clientsecret,
+		RedirectURL:  redirecturl,
 		Endpoint:     IBMw3idStagingEndpoint,
 		Scopes:       []string{"openid"},
 	}
@@ -67,13 +83,14 @@ func (auth *Authenticator) BeginLogin() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		csrftok, err := MakeCSRFtoken()
 		if err != nil {
-			http.Error(w, log.Errorf("Unable to make CSRF token: %s", err).Error(), http.StatusInternalServerError)
+			log.Error().Err(err).Msg("unable to make CSRF token")
+			http.Error(w, "unable to make CSRF token", http.StatusInternalServerError)
 			return
 		}
 		// We write our CSRF token into a cookie and into the OIDC request
 		http.SetCookie(w, MakeCSRFcookie(csrftok))
 		url := auth.OAuth2.AuthCodeURL(csrftok, oauth2.AccessTypeOnline)
-		log.Debugf("Redirecting user to %s to log in", url)
+		log.Debug().Str("url", url).Msg("redirecting user to log in")
 		http.Redirect(w, r, url, http.StatusTemporaryRedirect)
 	})
 }
@@ -87,24 +104,24 @@ func (auth *Authenticator) FetchToken(code string) (*jwt.ClaimSet, error) {
 	if !token.Valid() {
 		return claimset, errors.New("w3id.Exchange returned invalid token")
 	}
-	log.Debugf("exchanged code for token")
+	log.Debug().Msg("exchanged code for token")
 
 	// Next, extract the encoded id_token from the access token response
 	encidtoken := token.Extra("id_token").(string)
 	if len(encidtoken) == 0 {
 		return claimset, errors.New("w3id.Exchange() response missing id_token")
 	}
-	log.Debugf("got id_token from token")
+	log.Debug().Msg("got id_token from token")
 
 	// Verify the cryptographic signature on the id_token before using
 	// any information in it
 	jsonwt, err := jws.Verify([]byte(encidtoken), jwa.RS256, auth.PubKey)
 	if err != nil {
-		return claimset, log.Errorf("w3id.Exchange() id_token signature invalid: %v", err)
+		return claimset, fmt.Errorf("w3id.Exchange() id_token signature invalid: %v", err)
 	}
-	log.Debugf("verified signature on id_token")
+	log.Debug().Msg("verified signature on id_token")
 
-	log.Debugf("raw id_token = %s", jsonwt)
+	log.Debug().Str("id_token", string(jsonwt)).Msg("unmarshaling raw token")
 	claimset, err = UnmarshalJSON(jsonwt)
 	if err != nil {
 		return claimset, fmt.Errorf("w3id.Exchange() id_token JSON unmarshal failed: %v", err)
@@ -119,25 +136,26 @@ func (auth *Authenticator) FetchToken(code string) (*jwt.ClaimSet, error) {
 // handler in the chain using ClaimSetFromRequest.
 func (auth *Authenticator) CompleteLogin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Debugf("loginCallback started")
+		log.Debug().Msg("loginCallback started")
 
 		// First verify the state value to protect against CSRF attack
 		cstate := ReadCSRFcookie(r)
 		state := r.FormValue("state")
 		if state != cstate {
-			log.Debugf("Invalid CSRF state, expected %s got %s", cstate, state)
+			log.Debug().Str("expected", cstate).Str("got", state).Msg("invalid CSRF state")
 			http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
 			return
 		}
 
-		log.Debugf("passed CSRF check")
+		log.Debug().Msg("passed CSRF check")
 
 		// Then use the code we were given to fetch an access token via TLS
 		code := r.FormValue("code")
 		claimset, err := auth.FetchToken(code)
 		if err != nil {
-			log.Errorf("login failed: %v", err)
+			log.Error().Err(err).Msg("login failed")
 			http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
+			return
 		}
 
 		// Success, so put the claimset in the Context and call the next
