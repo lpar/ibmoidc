@@ -28,7 +28,7 @@ type Authenticator struct {
 // NewIntranetAuthenticator creates an Authenticator object for processing
 // IBMid authentication server responses.
 func NewIBMidAuthenticator(clientid, clientsecret, redirecturl string) *Authenticator {
-	oauth2 := &oauth2.Config{
+	oa2 := &oauth2.Config{
 		ClientID:     clientid,
 		ClientSecret: clientsecret,
 		RedirectURL:  redirecturl,
@@ -36,7 +36,7 @@ func NewIBMidAuthenticator(clientid, clientsecret, redirecturl string) *Authenti
 		Scopes:       []string{"openid"},
 	}
 	auth := &Authenticator{
-		OAuth2: oauth2,
+		OAuth2: oa2,
 		PubKey: IBMidPublicKey,
 	}
 	return auth
@@ -46,7 +46,7 @@ func NewIBMidAuthenticator(clientid, clientsecret, redirecturl string) *Authenti
 // NewIntranetAuthenticator creates an Authenticator object for processing
 // intranet w3ID authentication server responses.
 func NewIntranetAuthenticator(clientid, clientsecret, redirecturl string) *Authenticator {
-	oauth2 := &oauth2.Config{
+	oa2 := &oauth2.Config{
 		ClientID:     clientid,
 		ClientSecret: clientsecret,
 		RedirectURL:  redirecturl,
@@ -54,7 +54,7 @@ func NewIntranetAuthenticator(clientid, clientsecret, redirecturl string) *Authe
 		Scopes:       []string{"openid"},
 	}
 	auth := &Authenticator{
-		OAuth2: oauth2,
+		OAuth2: oa2,
 		PubKey: IBMw3idPublicKey,
 	}
 	return auth
@@ -63,7 +63,7 @@ func NewIntranetAuthenticator(clientid, clientsecret, redirecturl string) *Authe
 // NewIntranetStagingAuthenticator creates an Authenticator object for processing
 // intranet w3ID authentication server responses from the staging server.
 func NewIntranetStagingAuthenticator(clientid, clientsecret, redirecturl string) *Authenticator {
-	oauth2 := &oauth2.Config{
+	oa2 := &oauth2.Config{
 		ClientID:     clientid,
 		ClientSecret: clientsecret,
 		RedirectURL:  redirecturl,
@@ -71,7 +71,7 @@ func NewIntranetStagingAuthenticator(clientid, clientsecret, redirecturl string)
 		Scopes:       []string{"openid"},
 	}
 	auth := &Authenticator{
-		OAuth2: oauth2,
+		OAuth2: oa2,
 		PubKey: IBMw3idStagingPublicKey,
 	}
 	return auth
@@ -128,15 +128,15 @@ func (auth *Authenticator) FetchToken(code string) (*jwt.Token, error) {
 // handler in the chain using TokenFromRequest.
 func (auth *Authenticator) CompleteLoginFunc(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		nr := auth.decodeClaimsetToRequest(w, r)
+		nr := auth.decodeTokenToRequest(w, r)
 		next(w, nr)
 	}
 }
 
-// decodeClaimsetToRequest checks the CSRF cookie and fetches the claimset using the token in the response.
-// If everything worked, it adds the claimset to the request and returns the new request.
+// decodeTokenToRequest checks the CSRF cookie and fetches the token.
+// If everything worked, it adds the token to the request and returns the new request.
 // If not, it returns the same request it was passed.
-func (auth *Authenticator) decodeClaimsetToRequest(w http.ResponseWriter, r *http.Request) *http.Request {
+func (auth *Authenticator) decodeTokenToRequest(w http.ResponseWriter, r *http.Request) *http.Request {
 	log.Debug().Msg("loginCallback started")
 
 	// First verify the state value to protect against CSRF attack
@@ -152,13 +152,13 @@ func (auth *Authenticator) decodeClaimsetToRequest(w http.ResponseWriter, r *htt
 
 	// Then use the code we were given to fetch an access token via TLS
 	code := r.FormValue("code")
-	claimset, err := auth.FetchToken(code)
+	tok, err := auth.FetchToken(code)
 	if err != nil {
 		log.Error().Err(err).Msg("login failed")
 		http.Redirect(w, r, "/", http.StatusTemporaryRedirect)
 		return r
 	}
-  nr := RequestWithToken(r, claimset)
+  nr := RequestWithToken(r, tok)
 	return nr
 }
 
@@ -169,12 +169,12 @@ func (auth *Authenticator) decodeClaimsetToRequest(w http.ResponseWriter, r *htt
 // handler in the chain using TokenFromRequest.
 func (auth *Authenticator) CompleteLogin(next http.Handler) http.Handler {
 	return http.HandlerFunc( func(w http.ResponseWriter, r *http.Request) {
-		nr := auth.decodeClaimsetToRequest(w, r)
+		nr := auth.decodeTokenToRequest(w, r)
 		next.ServeHTTP(w, nr)
 	})
 }
 
-// RequestWithToken adds a claimset to the http request, using a private
+// RequestWithToken adds a token to the http request, using a private
 // context key.
 func RequestWithToken(r *http.Request, cs *jwt.Token) *http.Request {
 	ctx := r.Context()
@@ -183,9 +183,9 @@ func RequestWithToken(r *http.Request, cs *jwt.Token) *http.Request {
 	return nr
 }
 
-// TokenFromRequest obtains the authenticated claimset from the request's
+// TokenFromRequest obtains the authenticated token from the request's
 // context, where it was stored earlier by RequestWithToken.
-// The boolean indicates whether an authenticated claimset was actually found
+// The boolean indicates whether an authenticated token was actually found
 // in the request.
 func TokenFromRequest(r *http.Request) (*jwt.Token, bool) {
 	ctx := r.Context()

@@ -186,77 +186,8 @@ func pemToRSA(pemtxt string) *rsa.PublicKey {
 }
 
 func init() {
-	// IBM w3 token endpoint HTTP Basic authentication doesn't work as of
-	// 2016-06-03.
+	// IBM w3 token endpoint HTTP Basic authentication doesn't work properly as of 2016-06-03.
 	oauth2.RegisterBrokenAuthHeaderProvider(IBMw3idEndpoint.TokenURL)
 	oauth2.RegisterBrokenAuthHeaderProvider(IBMw3idStagingEndpoint.TokenURL)
 }
 
-/*
-// UnmarshalJSON turns a JSON payload from a JWS token into a set of claims,
-// and handles remapping IBM-specific private claims to standard ones:
-//
-// lastName     → family_name
-// firstName    → given_name
-// cn           → name
-// dn           → sub
-// emailAddress → email
-//
-// The original emailAddress claim is left intact, as are the dn and realmName
-// claims. The others are removed after remapping.
-//
-func UnmarshalJSON(jsondata []byte) (*jwt.ClaimSet, error) {
-	cset := jwt.NewClaimSet()
-	err := cset.UnmarshalJSON(jsondata)
-	if err != nil {
-		return cset, err
-	}
-	// IBM returns either an array or a string as e-mail address
-	email := cset.Get("emailAddress")
-	if email != nil {
-	switch et := email.(type) {
-	case string:
-		err := cset.Set("email", et)
-		if err != nil {
-			return cset, fmt.Errorf("error adding email to claimset: %s", err)
-		}
-	case []interface{}:
-		err := cset.Set("email", et[0].(string))
-		if err != nil {
-			return cset, fmt.Errorf("error adding email to claimset: %s", err)
-		}
-	default:
-		return cset, fmt.Errorf("emailAddress claim of unexpected type")
-	}
-	}
-	// Remap some other fields
-	remap := map[string]string{
-		"lastName":  "family_name",
-		"firstName": "given_name",
-		"cn":        "name",
-	}
-	for kf, kt := range remap {
-		v := cset.Get(kf)
-		err := cset.Set(kt, v)
-		if err != nil {
-			return cset, fmt.Errorf("error adding %s to claimset: %s", kt, err)
-		}
-		delete(cset.PrivateClaims, kf)
-	}
-	return cset, nil
-}
-
-// Decode unpacks an id_token payload, as returned from the token endpoint,
-// from its raw base64-encoded value.
-func Decode(payload []byte) (*jwt.ClaimSet, error) {
-	s := strings.Split(string(payload), ".")
-	if len(s) < 2 {
-		return nil, errors.New("invalid id_token payload: not a triple")
-	}
-	jpld, err := base64.RawURLEncoding.DecodeString(s[1])
-	if err != nil {
-		return nil, fmt.Errorf("can't decode id_token: %s", err)
-	}
-	return UnmarshalJSON(jpld)
-}
-*/
