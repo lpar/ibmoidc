@@ -1,13 +1,12 @@
 package ibmoidc
 
 import (
-	"bytes"
 	"context"
 	"crypto/rsa"
 	"errors"
 	"fmt"
-	"github.com/lestrrat-go/jwx/jwa"
-	"github.com/lestrrat-go/jwx/jwt"
+	"github.com/dgrijalva/jwt-go"
+
 	"net/http"
 
 	"github.com/lpar/blammo/log"
@@ -112,7 +111,16 @@ func (auth *Authenticator) FetchToken(code string) (*jwt.Token, error) {
 		return jsonwt, errors.New("endpoint oauth2.Exchange() response missing id_token")
 	}
 	log.Debug().Msg("got id_token from token")
-	jsonwt, err = jwt.ParseVerify(bytes.NewReader([]byte(encidtoken)), jwa.RS256, auth.PubKey)
+	log.Debug().Str("token", encidtoken).Msg("encoded token")
+	jsonwt, err = jwt.Parse(encidtoken, func(token *jwt.Token) (interface{}, error) {
+		algo := token.Header["alg"].(string)
+		if algo == "RS256" {
+			return auth.PubKey, nil
+		} else {
+			log.Error().Str("alg", algo).Msg("bad JWT signature algorithm")
+			return nil, nil
+		}
+	})
 	if err != nil {
 		return jsonwt, fmt.Errorf("endpoint oauth2.Exchange() id_token invalid: %v", err)
 	}
